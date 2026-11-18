@@ -118,7 +118,7 @@ property name, ready for a form.
 ## Remote mode: what runs on the server
 
 `Where`, `OrderBy`/`ThenBy` (descending), `Skip`, `Take`, `Include`/`ThenInclude` (with `OrderBy` inside),
-`AsNoTracking`, and `ToListAsync`, `FirstAsync`, `SingleAsync`, `AnyAsync`, `CountAsync` and their
+`AsNoTracking`, a final `Select` (applied to the loaded entities), and `ToListAsync`, `FirstAsync`, `SingleAsync`, `AnyAsync`, `CountAsync` and their
 `OrDefault` variants. Inside `Where`: comparisons, `&&`, `||`, `!`, arithmetic, `string.Contains`/
 `StartsWith`/`EndsWith`/`ToLower`/`ToUpper`/`Trim`, `list.Contains(x)`, and `Any`/`All` on collections.
 Everything else throws `NotSupportedException` naming the operator — nothing silently runs in memory.

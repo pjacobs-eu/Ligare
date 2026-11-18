@@ -115,9 +115,16 @@ internal sealed class RemoteLigareContext : ILigareContext
         using var document = await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync(cancellationToken), cancellationToken: cancellationToken);
 
         var materializer = new Materializer(model, query.Tracking ? _tracker : null);
-        return document.RootElement.GetProperty("value").EnumerateArray()
-            .Select(json => materializer.Materialize(json, entityType, query.Includes))
-            .ToList();
+        var entities = document.RootElement.GetProperty("value").EnumerateArray()
+            .Select(json => materializer.Materialize(json, entityType, query.Includes));
+
+        if (query.Projection is { } projection)
+        {
+            var select = projection.Compile();
+            return entities.Select(e => select.DynamicInvoke(e)!).ToList();
+        }
+
+        return entities.ToList();
     }
 
     private static async Task EnsureSuccessAsync(HttpResponseMessage response, CancellationToken cancellationToken)

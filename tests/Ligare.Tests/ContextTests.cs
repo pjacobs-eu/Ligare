@@ -46,6 +46,9 @@ public abstract class ContextTests(Mode mode) : IAsyncLifetime
         Assert.Equal(1, startingWithC);
         Assert.True(anyBlocked);
         Assert.Equal("Released", defaultStatus.Name);
+
+        var projected = await db.Set<Tool>().Where(t => t.Name != "").OrderBy(t => t.Name).Select(t => t.Name.ToUpper()).ToListAsync(Ct);
+        Assert.Equal(["CALIPER", "WRENCH"], projected);
     }
 
     [Fact]

@@ -51,7 +51,8 @@ internal sealed record RemoteQuery(
     int? Top,
     IncludeNode Includes,
     QueryTerminal Terminal,
-    bool Tracking)
+    bool Tracking,
+    LambdaExpression? Projection = null)
 {
     /// <summary>The OData query string, without the leading '?'.</summary>
     public string ToQueryString(bool forCount = false)
@@ -139,6 +140,11 @@ internal static class QueryTranslator
             return;
         }
 
+        if (state.Projection is not null)
+        {
+            throw new NotSupportedException("Select must be the last operator of a query against a Ligare server.");
+        }
+
         if (expression is not MethodCallExpression call)
         {
             throw new NotSupportedException($"Ligare cannot send '{expression}' to the server.");
@@ -172,6 +178,11 @@ internal static class QueryTranslator
                     }
 
                     state.Skip = (state.Skip ?? 0) + Evaluate<int>(call.Arguments[1]);
+                    return;
+                case nameof(Queryable.Select) when call.Arguments.Count == 2 && Unquote(call.Arguments[1]).Parameters.Count == 1:
+                    // Projections run on the loaded entities, after the server filtered and sorted them.
+                    state.Projection = Unquote(call.Arguments[1]);
+                    state.Tracking = false;
                     return;
                 case nameof(Queryable.Take):
                     var take = Evaluate<int>(call.Arguments[1]);
@@ -217,7 +228,7 @@ internal static class QueryTranslator
         }
 
         throw new NotSupportedException(
-            $"{name} cannot run on a Ligare server. Supported: Where, OrderBy, ThenBy, Skip, Take, Include, ThenInclude, AsNoTracking, " +
+            $"{name} cannot run on a Ligare server. Supported: Where, OrderBy, ThenBy, Skip, Take, Include, ThenInclude, AsNoTracking, Select (last), " +
             "and First, Single, Any, Count, ToList (async). Load the data first, then continue in memory.");
     }
 
@@ -285,6 +296,8 @@ internal static class QueryTranslator
 
         public bool Tracking { get; set; } = tracking;
 
+        public LambdaExpression? Projection { get; set; }
+
         public void AddFilter(LambdaExpression predicate) => _filters.Add(ODataFilterWriter.Write(predicate));
 
         public void EnsureNoPaging(string method)
@@ -316,7 +329,7 @@ internal static class QueryTranslator
                 _ => string.Join(" and ", _filters.Select(f => $"({f})")),
             };
 
-            return new RemoteQuery(ElementType!, filter, [.. OrderBy], Skip, top, Includes, Terminal, Tracking);
+            return new RemoteQuery(ElementType!, filter, [.. OrderBy], Skip, top, Includes, Terminal, Tracking, Projection);
         }
     }
 }
