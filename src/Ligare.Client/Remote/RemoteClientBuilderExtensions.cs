@@ -27,12 +27,17 @@ public static class RemoteClientBuilderExtensions
     public static LigareClientBuilder UseServer(this LigareClientBuilder builder, Func<IServiceProvider, HttpClient> createClient)
     {
         builder.Services.AddSingleton<RemoteModelSource>();
-        builder.Services.AddScoped<ILigareContextFactory>(sp => new RemoteLigareContextFactory(sp, createClient));
+        builder.Services.AddScoped<ILigareContextFactory>(sp => new RemoteLigareContextFactory(() => createClient(sp), sp.GetRequiredService<RemoteModelSource>()));
         return builder;
     }
+}
 
-    private sealed class RemoteLigareContextFactory(IServiceProvider services, Func<IServiceProvider, HttpClient> createClient) : ILigareContextFactory
-    {
-        public ILigareContext CreateContext() => new RemoteLigareContext(createClient(services), services.GetRequiredService<RemoteModelSource>());
-    }
+/// <summary>
+/// Creates remote-mode contexts against the server the <see cref="HttpClient"/> points to (its base
+/// address is the path given to <c>MapLigare</c>). Use it directly when the server is only known at run
+/// time, e.g. to switch between a server and a local database by configuration.
+/// </summary>
+public sealed class RemoteLigareContextFactory(Func<HttpClient> createClient, RemoteModelSource models) : ILigareContextFactory
+{
+    public ILigareContext CreateContext() => new RemoteLigareContext(createClient(), models);
 }

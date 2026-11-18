@@ -138,26 +138,29 @@ internal sealed class RemoteLigareContext : ILigareContext
 }
 
 /// <summary>Loads the server's model once and shares it between contexts.</summary>
-internal sealed class RemoteModelSource
+/// <summary>
+/// Caches the models of Ligare servers, one per server address, so each is loaded once. Share one
+/// instance between the factories of an application (a singleton).
+/// </summary>
+public sealed class RemoteModelSource
 {
-    private readonly SemaphoreSlim _lock = new(1, 1);
-    private RemoteModel? _model;
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, Lazy<Task<RemoteModel>>> _models = new();
 
-    public async ValueTask<RemoteModel> GetAsync(HttpClient http, CancellationToken cancellationToken)
+    internal async ValueTask<RemoteModel> GetAsync(HttpClient http, CancellationToken cancellationToken)
     {
-        if (_model is not null)
-        {
-            return _model;
-        }
+        var key = http.BaseAddress?.AbsoluteUri ?? "";
+        var model = _models.GetOrAdd(key, _ => new Lazy<Task<RemoteModel>>(async () =>
+            new RemoteModel((await http.GetFromJsonAsync<ModelDescription>("$model", WireJson.Options, CancellationToken.None))!)));
 
-        await _lock.WaitAsync(cancellationToken);
         try
         {
-            return _model ??= new RemoteModel((await http.GetFromJsonAsync<ModelDescription>("$model", WireJson.Options, cancellationToken))!);
+            return await model.Value.WaitAsync(cancellationToken);
         }
-        finally
+        catch when (model.Value.IsFaulted)
         {
-            _lock.Release();
+            // A server that was unreachable is asked again next time.
+            _models.TryRemove(new KeyValuePair<string, Lazy<Task<RemoteModel>>>(key, model));
+            throw;
         }
     }
 }
