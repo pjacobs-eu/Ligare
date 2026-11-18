@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Ligare.Client.EntityFrameworkCore\Ligare.Client.EntityFrameworkCore.csproj" />
+    <ProjectReference Include="..\..\src\Ligare.Server\Ligare.Server.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" />
+  </ItemGroup>
+
+</Project>
