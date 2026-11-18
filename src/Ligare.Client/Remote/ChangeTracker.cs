@@ -212,7 +212,7 @@ internal sealed class ChangeTracker
         }
     }
 
-    private TrackedEntity Track(RemoteModel model, object entity, TrackedState state)
+    private TrackedEntity Track(RemoteModel model, object entity, TrackedState state, Dictionary<string, object?>? shadow = null)
     {
         if (_byInstance.TryGetValue(entity, out var existing))
         {
@@ -220,7 +220,7 @@ internal sealed class ChangeTracker
         }
 
         var type = model[entity.GetType()];
-        var shadow = new Dictionary<string, object?>();
+        shadow ??= [];
         var key = KeyOf(type, entity, shadow);
 
         if (type.Key.Any(k => IsDefault(k.Get(entity, shadow))))
@@ -265,8 +265,18 @@ internal sealed class ChangeTracker
                 var current = new HashSet<object>(items.Cast<object>(), ReferenceEqualityComparer.Instance);
                 foreach (var item in current)
                 {
-                    var itemEntry = TrackOrQueue(model, item, queue);
-                    SetForeignKey(itemEntry, member.Description.ForeignKey!, entry, member.Description.PrincipalKey!);
+                    // The foreign key first: it may be part of the element's key (e.g. owner id + sequence).
+                    if (!_byInstance.TryGetValue(item, out var itemEntry))
+                    {
+                        var itemShadow = new Dictionary<string, object?>();
+                        SetForeignKey(model[item.GetType()], item, itemShadow, member.Description.ForeignKey!, entry, member.Description.PrincipalKey!);
+                        itemEntry = Track(model, item, TrackedState.Added, itemShadow);
+                        queue.Enqueue(itemEntry);
+                    }
+                    else
+                    {
+                        SetForeignKey(itemEntry, member.Description.ForeignKey!, entry, member.Description.PrincipalKey!);
+                    }
 
                     if (member.Description.Inverse is { } inverse && itemEntry.Type.Find(inverse) is { IsShadow: false } back
                         && back.Get(item, null) is null)
@@ -305,14 +315,17 @@ internal sealed class ChangeTracker
         return entry;
     }
 
-    private static void SetForeignKey(TrackedEntity dependent, IReadOnlyList<string> foreignKey, TrackedEntity? principal, IReadOnlyList<string> principalKey)
+    private static void SetForeignKey(TrackedEntity dependent, IReadOnlyList<string> foreignKey, TrackedEntity? principal, IReadOnlyList<string> principalKey) =>
+        SetForeignKey(dependent.Type, dependent.Entity, dependent.Shadow, foreignKey, principal, principalKey);
+
+    private static void SetForeignKey(RemoteEntityType type, object dependent, Dictionary<string, object?> shadow, IReadOnlyList<string> foreignKey, TrackedEntity? principal, IReadOnlyList<string> principalKey)
     {
         for (var i = 0; i < foreignKey.Count; i++)
         {
             var value = principal is null
                 ? null
                 : principal.Type[principalKey[i]].Get(principal.Entity, principal.Shadow);
-            dependent.Type[foreignKey[i]].Set(dependent.Entity, value, dependent.Shadow);
+            type[foreignKey[i]].Set(dependent, value, shadow);
         }
     }
 

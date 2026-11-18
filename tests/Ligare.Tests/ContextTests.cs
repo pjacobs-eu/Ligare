@@ -150,6 +150,21 @@ public abstract class ContextTests(Mode mode) : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Elements_keyed_by_their_owner_get_the_owner_key()
+    {
+        await using (var db = _database.CreateContext())
+        {
+            var tool = await db.Set<Tool>().FirstAsync(t => t.Id == _database.Wrench.Id, Ct);
+            tool.Notes.Add(new ToolNote { Number = 1, Text = "Calibrate yearly" });
+            await db.SaveChangesAsync(Ct);
+        }
+
+        await using var check = _database.CreateContext();
+        var saved = await check.Set<Tool>().Include(t => t.Notes).FirstAsync(t => t.Id == _database.Wrench.Id, Ct);
+        Assert.Equal("Calibrate yearly", Assert.Single(saved.Notes).Text);
+    }
+
+    [Fact]
     public async Task Removed_entities_are_deleted()
     {
         await using (var db = _database.CreateContext())

@@ -32,6 +32,8 @@ public sealed class Tool
     public Status Status { get; set; } = null!;
 
     public ICollection<StatusEntry> StatusEntries { get; } = new List<StatusEntry>();
+
+    public ICollection<ToolNote> Notes { get; } = new List<ToolNote>();
 }
 
 public sealed class StatusEntry
@@ -45,6 +47,19 @@ public sealed class StatusEntry
     public string? Comment { get; set; }
 
     public string ChangedBy { get; set; } = "";
+}
+
+/// <summary>A note numbered within its tool: the tool's id is part of the key.</summary>
+[Microsoft.EntityFrameworkCore.PrimaryKey(nameof(ToolId), nameof(Number))]
+public sealed class ToolNote
+{
+    public Guid ToolId { get; set; }
+
+    public Tool Tool { get; set; } = null!;
+
+    public int Number { get; set; }
+
+    public string Text { get; set; } = "";
 }
 
 public sealed class Customer
@@ -67,10 +82,12 @@ public sealed class TestDbContext(DbContextOptions<TestDbContext> options) : DbC
         modelBuilder.Entity<Customer>().HasOne(c => c.FavoriteTool).WithMany();
 
         // Ids are assigned in code, so EF must not take an entity with an id for an existing one.
-        foreach (var entity in modelBuilder.Model.GetEntityTypes())
+        foreach (var entity in modelBuilder.Model.GetEntityTypes().Where(e => e.FindProperty("Id") is not null))
         {
             modelBuilder.Entity(entity.ClrType).Property("Id").ValueGeneratedNever();
         }
+
+        modelBuilder.Entity<ToolNote>().Property(n => n.Number).ValueGeneratedNever();
     }
 }
 
