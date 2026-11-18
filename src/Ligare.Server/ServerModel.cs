@@ -133,6 +133,33 @@ internal sealed class ServerModel
             {
                 configuration.RemoveProperty(property);
             }
+
+            // The conventions skip properties without a public setter; EF Core maps them, so filters may use them.
+            var known = configuration.Properties.Select(p => p.Name).ToHashSet(StringComparer.Ordinal);
+            foreach (var property in entityType.GetProperties().Select(p => p.PropertyInfo).OfType<System.Reflection.PropertyInfo>())
+            {
+                if (known.Contains(property.Name))
+                {
+                    continue;
+                }
+
+                var type = Nullable.GetUnderlyingType(property.PropertyType) ?? property.PropertyType;
+                if (type.IsEnum)
+                {
+                    configuration.AddEnumProperty(property);
+                }
+                else if (type.IsPrimitive || type == typeof(string) || type == typeof(decimal) || type == typeof(Guid)
+                         || type == typeof(DateTimeOffset) || type == typeof(DateTime) || type == typeof(DateOnly)
+                         || type == typeof(TimeOnly) || type == typeof(TimeSpan) || type == typeof(byte[]))
+                {
+                    configuration.AddProperty(property);
+                }
+                else
+                {
+                    builder.AddComplexType(type);
+                    configuration.AddComplexProperty(property);
+                }
+            }
         }
 
         return builder.GetEdmModel();

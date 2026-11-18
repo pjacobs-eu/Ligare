@@ -14,6 +14,11 @@ public sealed class Status
     public Guid Id { get; set; } = Guid.NewGuid();
 
     public string Name { get; set; } = "";
+
+    /// <summary>Set once, like a system flag; EF Core maps it through the private setter.</summary>
+    public bool IsDefault { get; private set; }
+
+    public static Status CreateDefault(string name) => new() { Name = name, IsDefault = true };
 }
 
 public sealed class Tool
@@ -166,7 +171,7 @@ public sealed class TestDatabase : IAsyncDisposable
         using var db = new TestDbContext(new DbContextOptionsBuilder<TestDbContext>().UseSqlite(_connection).Options);
         db.Database.EnsureCreated();
 
-        Released = new Status { Name = "Released" };
+        Released = Status.CreateDefault("Released");
         Blocked = new Status { Name = "Blocked" };
         Wrench = new Tool { Name = "Wrench", Status = Released };
         db.AddRange(Released, Blocked, Wrench, new Tool { Name = "Caliper", Status = Blocked });

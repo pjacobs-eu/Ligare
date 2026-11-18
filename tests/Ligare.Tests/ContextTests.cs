@@ -39,11 +39,13 @@ public abstract class ContextTests(Mode mode) : IAsyncLifetime
         var second = await db.Set<Tool>().OrderBy(t => t.Name).Skip(1).Take(1).SingleAsync(Ct);
         var startingWithC = await db.Set<Tool>().CountAsync(t => t.Name.StartsWith(prefix), Ct);
         var anyBlocked = await db.Set<Tool>().AnyAsync(t => t.StatusId == _database.Blocked.Id, Ct);
+        var defaultStatus = await db.Set<Status>().SingleAsync(s => s.IsDefault, Ct);
 
         Assert.Equal(["Wrench", "Caliper"], ordered.Select(t => t.Name));
         Assert.Equal("Wrench", second.Name);
         Assert.Equal(1, startingWithC);
         Assert.True(anyBlocked);
+        Assert.Equal("Released", defaultStatus.Name);
     }
 
     [Fact]
