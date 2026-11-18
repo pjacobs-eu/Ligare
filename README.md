@@ -7,9 +7,11 @@ adding to navigation collections, `SaveChangesAsync` — and decide by configura
 actually lives: in a `DbContext` in the same process, or behind a Ligare server over OData.
 
 ```csharp
-var tool = await db.Set<Equipment>()
-    .Include(e => e.Status)
-    .FirstAsync(e => e.InventoryNumber == "PM-0003");
+await using var db = contextFactory.CreateContext();
+
+var tool = await db.Set<Tool>()
+    .Include(t => t.Status)
+    .FirstAsync(t => t.InventoryNumber == "PM-0003");
 
 tool.Name = "Torque wrench 20–100 Nm";
 tool.StatusChanges.Add(new StatusChange { Status = blocked, Comment = "Dropped" });
@@ -18,24 +20,103 @@ customer.FavoriteTool = tool;
 await db.SaveChangesAsync();
 ```
 
-```csharp
-// Direct: a DbContext in this process (server-side Blazor, desktop app with a local database)
-services.AddLigareClient(o => o.UseEntityFrameworkCore<AppDbContext>());
-
-// Remote: the same code, over OData (Blazor WebAssembly, MAUI against a server)
-services.AddLigareClient(o => o.UseServer(new Uri("https://example.com/data")));
-```
-
 Your EF Core entities are the model everywhere — no DTOs, no generated client, no hand-written API.
+Queries use the operators you know from `Microsoft.EntityFrameworkCore`.
 
 ## Packages
 
 | Package | Purpose |
 |---|---|
-| `Ligare.Client` | EF Core-style API, snapshot change tracking, remote mode over OData |
-| `Ligare.Client.EntityFrameworkCore` | Direct mode against a `DbContext` |
-| `Ligare.Server` | Exposes a `DbContext` as OData for Ligare clients: `$batch` saves, validation, tenancy, audit |
+| `Ligare.Client` | `ILigareContext`, save rules, remote mode over OData |
+| `Ligare.EntityFrameworkCore` | Direct mode against a `DbContext`; the save pipeline shared with the server |
+| `Ligare.Server` | Exposes a `DbContext` as OData for remote clients, running the same save rules |
+
+## Setup
+
+### Direct mode — the data is in this process
+
+Server-side Blazor, a desktop app with a local database, a background worker:
+
+```csharp
+builder.Services.AddDbContextFactory<AppDbContext>(o => o.UseNpgsql(connectionString));
+builder.Services.AddLigareClient(l => l.UseEntityFrameworkCore<AppDbContext>());
+builder.Services.AddLigareRules(typeof(ToolRules).Assembly);
+```
+
+If the context depends on scoped services (the current tenant, the current user), register the
+factory with `ServiceLifetime.Scoped`.
+
+### Server — share a DbContext with remote clients
+
+*In development.* The server hosts the same `DbContext`, rules and query filters, and serves them
+over OData:
+
+```csharp
+builder.Services.AddDbContextFactory<AppDbContext>(o => o.UseNpgsql(connectionString), ServiceLifetime.Scoped);
+builder.Services.AddLigareRules(typeof(ToolRules).Assembly);
+builder.Services.AddLigareServer<AppDbContext>(server =>
+{
+    server.MaxPageSize = 500;        // largest result a client can request
+    server.MaxExpansionDepth = 3;    // deepest Include chain
+});
+
+var app = builder.Build();
+app.MapLigare("/data");
+```
+
+Only entity types of the `DbContext` are exposed, global query filters (for example per tenant)
+always apply, and every save runs the save rules on the server — a client cannot skip them.
+
+### Remote mode — the data is on a Ligare server
+
+*In development.* Blazor WebAssembly, a MAUI app against a server — the same code as in direct mode:
+
+```csharp
+builder.Services.AddLigareClient(l => l.UseServer(new Uri("https://example.com/data")));
+```
+
+## Save rules
+
+Business rules live in one place and run on every save — in direct mode in the saving process, in
+remote mode on the server:
+
+```csharp
+public sealed class StatusChangeRules(TimeProvider clock) : IEntityRule<StatusChange>
+{
+    // Complete or derive values; may change any tracked entity.
+    public ValueTask PrepareAsync(EntityChange<StatusChange> change, CancellationToken ct)
+    {
+        if (change.IsAdded)
+        {
+            change.Entity.ChangedAt = clock.GetUtcNow();
+            change.Entity.Tool.Status = change.Entity.Status;
+        }
+
+        return ValueTask.CompletedTask;
+    }
+
+    // Report what is not allowed; nothing is stored if any rule reports an error.
+    public void Validate(EntityChange<StatusChange> change, ValidationErrors errors)
+    {
+        if (string.IsNullOrWhiteSpace(change.Entity.Comment))
+        {
+            errors.Add(change, c => c.Comment, "A reason is required.");
+        }
+    }
+}
+```
+
+A rejected save throws `LigareValidationException`; `exception.For(entity)` returns the messages by
+property name, ready for a form.
+
+## Things to know
+
+- **Ids assigned in code:** configure such keys with `ValueGeneratedNever()`. Otherwise EF Core takes
+  a new entity that already has an id, found through a navigation, for an existing one and updates
+  instead of inserting it.
+- **Unit of work:** a context tracks what it loaded. Keep one per edit (a page, a dialog), not one
+  per application.
 
 ## Status
 
-Early development. The API will change.
+Early development: direct mode works; server and remote mode are being built. The API will change.

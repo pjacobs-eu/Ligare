@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <Description>Direct mode for Ligare: runs queries and saves against a local EF Core DbContext.</Description>
+    <Description>EF Core backend for Ligare: direct mode against a DbContext and the save pipeline shared with Ligare.Server.</Description>
   </PropertyGroup>
 
   <ItemGroup>

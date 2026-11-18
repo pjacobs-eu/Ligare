@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <Description>Exposes an EF Core DbContext as an OData service for Ligare clients, with change validation, tenancy and audit.</Description>
+    <Description>Exposes an EF Core DbContext as an OData service for Ligare clients, with the same save rules as direct mode.</Description>
   </PropertyGroup>
 
   <ItemGroup>
@@ -9,7 +9,10 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" />
+    <ProjectReference Include="..\Ligare.EntityFrameworkCore\Ligare.EntityFrameworkCore.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.OData" />
   </ItemGroup>
 

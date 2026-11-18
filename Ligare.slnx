@@ -1,7 +1,7 @@
 <Solution>
   <Folder Name="/src/">
     <Project Path="src/Ligare.Client/Ligare.Client.csproj" />
-    <Project Path="src/Ligare.Client.EntityFrameworkCore/Ligare.Client.EntityFrameworkCore.csproj" />
+    <Project Path="src/Ligare.EntityFrameworkCore/Ligare.EntityFrameworkCore.csproj" />
     <Project Path="src/Ligare.Server/Ligare.Server.csproj" />
   </Folder>
   <Folder Name="/tests/">

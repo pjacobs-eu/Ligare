@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
-    <ProjectReference Include="..\..\src\Ligare.Client.EntityFrameworkCore\Ligare.Client.EntityFrameworkCore.csproj" />
+    <ProjectReference Include="..\..\src\Ligare.EntityFrameworkCore\Ligare.EntityFrameworkCore.csproj" />
     <ProjectReference Include="..\..\src\Ligare.Server\Ligare.Server.csproj" />
   </ItemGroup>
 
