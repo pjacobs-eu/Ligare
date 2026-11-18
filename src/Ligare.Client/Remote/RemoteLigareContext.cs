@@ -54,7 +54,7 @@ internal sealed class RemoteLigareContext : ILigareContext
         {
             var rejected = await response.Content.ReadFromJsonAsync<SaveErrorResponse>(WireJson.Options, cancellationToken);
             throw new LigareValidationException(rejected!.Errors
-                .Select(e => new LigareValidationError(_tracker.Find(model[e.Type], e.Key)?.Entity ?? (object)e.Key, e.Property, e.Message))
+                .Select(e => new LigareValidationError(_tracker.Find(model[e.Type], e.Key)?.Entity ?? (object)e.Key, e.Property, e.Code))
                 .ToList());
         }
 

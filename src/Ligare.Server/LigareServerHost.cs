@@ -87,7 +87,7 @@ internal sealed class LigareServerHost<TContext>(IOptions<LigareServerOptions> o
         {
             var errors = exception.Errors
                 .Select(e => db.Entry(e.Entity) is var entry
-                    ? new WireError(entry.Metadata.ClrType.FullName!, EntityWriter.Key(entry), e.PropertyName, e.Message)
+                    ? new WireError(entry.Metadata.ClrType.FullName!, EntityWriter.Key(entry), e.PropertyName, e.Code)
                     : null)
                 .ToList();
             await Results.Json(new SaveErrorResponse(errors!), WireJson.Options, statusCode: StatusCodes.Status422UnprocessableEntity).ExecuteAsync(http);

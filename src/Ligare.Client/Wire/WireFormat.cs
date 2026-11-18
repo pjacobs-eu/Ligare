@@ -69,7 +69,7 @@ public sealed record WireEntity(string Type, Dictionary<string, JsonElement> Key
 /// <summary>Body of a 422 response to <c>$save</c>.</summary>
 public sealed record SaveErrorResponse(IReadOnlyList<WireError> Errors);
 
-public sealed record WireError(string Type, Dictionary<string, JsonElement> Key, string? Property, string Message);
+public sealed record WireError(string Type, Dictionary<string, JsonElement> Key, string? Property, string Code);
 
 public static class WireJson
 {

@@ -131,8 +131,8 @@ public abstract class ContextTests(Mode mode) : IAsyncLifetime
             var error = await Assert.ThrowsAsync<LigareValidationException>(() => db.SaveChangesAsync(Ct));
 
             var byProperty = error.For(tool);
-            Assert.Equal(["Name is required."], byProperty["Name"]);
-            Assert.Equal(["Change the status by adding a status entry."], byProperty["Status"]);
+            Assert.Equal(["tool.name.required"], byProperty["Name"]);
+            Assert.Equal(["tool.status.requires_entry"], byProperty["Status"]);
         }
 
         await using var check = _database.CreateContext();

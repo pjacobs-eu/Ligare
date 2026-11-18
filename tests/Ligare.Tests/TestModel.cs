@@ -109,7 +109,7 @@ public sealed class StatusEntryRule : IEntityRule<StatusEntry>
     {
         if (string.IsNullOrWhiteSpace(change.Entity.Comment))
         {
-            errors.Add(change, e => e.Comment, "A reason is required.");
+            errors.Add(change, e => e.Comment, "status_entry.comment.required");
         }
     }
 }
@@ -131,13 +131,13 @@ public sealed class ToolRule : IEntityRule<Tool>
     {
         if (string.IsNullOrWhiteSpace(change.Entity.Name))
         {
-            errors.Add(change, t => t.Name, "Name is required.");
+            errors.Add(change, t => t.Name, "tool.name.required");
         }
 
         if (!change.IsAdded && change.IsModified(t => t.Status)
             && !change.ChangeSet.Added<StatusEntry>().Any(e => e.Tool == change.Entity))
         {
-            errors.Add(change, t => t.Status, "Change the status by adding a status entry.");
+            errors.Add(change, t => t.Status, "tool.status.requires_entry");
         }
     }
 }

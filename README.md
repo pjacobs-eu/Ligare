@@ -106,14 +106,15 @@ public sealed class StatusChangeRules(TimeProvider clock) : IEntityRule<StatusCh
     {
         if (string.IsNullOrWhiteSpace(change.Entity.Comment))
         {
-            errors.Add(change, c => c.Comment, "A reason is required.");
+            errors.Add(change, c => c.Comment, "status_change.comment.required");
         }
     }
 }
 ```
 
-A rejected save throws `LigareValidationException`; `exception.For(entity)` returns the messages by
-property name, ready for a form.
+Rules report error codes (e.g. `equipment.name.required`), not texts: the user interface translates
+them. A rejected save throws `LigareValidationException`; `exception.For(entity)` returns the codes
+by property name, ready for a form.
 
 ## Remote mode: what runs on the server
 
