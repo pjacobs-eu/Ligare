@@ -19,10 +19,22 @@ public sealed class EfLigareContext(DbContext dbContext, IServiceProvider servic
 
     public void Remove<T>(T entity) where T : class => DbContext.Remove(entity);
 
-    public async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
+    public async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default) =>
+        (await SaveChangesAndListAsync(cancellationToken)).Count;
+
+    /// <summary>Like <see cref="SaveChangesAsync"/>, returning every entity written, including those the rules changed.</summary>
+    public async Task<IReadOnlyList<object>> SaveChangesAndListAsync(CancellationToken cancellationToken = default)
     {
         await SaveRules.RunAsync(services, DetectChanges, cancellationToken);
-        return await DbContext.SaveChangesAsync(cancellationToken);
+
+        DbContext.ChangeTracker.DetectChanges();
+        var written = DbContext.ChangeTracker.Entries()
+            .Where(e => !e.Metadata.IsOwned() && e.State is EntityState.Added or EntityState.Modified)
+            .Select(e => e.Entity)
+            .ToList();
+
+        await DbContext.SaveChangesAsync(cancellationToken);
+        return written;
     }
 
     public void Dispose() => DbContext.Dispose();

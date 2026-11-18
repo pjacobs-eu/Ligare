@@ -2,6 +2,10 @@ using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Ligare.EntityFrameworkCore;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.TestHost;
+using Microsoft.Extensions.Hosting;
 
 namespace Ligare.Tests;
 
@@ -106,25 +110,56 @@ public sealed class ToolRule : IEntityRule<Tool>
     }
 }
 
-/// <summary>An SQLite in-memory database with a direct-mode Ligare client, open for one test.</summary>
+public enum Mode
+{
+    Direct,
+    Remote,
+}
+
+/// <summary>
+/// An SQLite in-memory database and a Ligare client for one test: in direct mode on the database, in
+/// remote mode through a Ligare server on a test host, which runs the save rules.
+/// </summary>
 public sealed class TestDatabase : IAsyncDisposable
 {
     private readonly SqliteConnection _connection = new("Data Source=:memory:");
-    private readonly ServiceProvider _services;
+    private readonly ServiceProvider _client;
     private readonly IServiceScope _scope;
+    private readonly WebApplication? _server;
 
-    public TestDatabase()
+    private TestDatabase(Mode mode)
     {
         _connection.Open();
 
-        var services = new ServiceCollection();
-        services.AddDbContextFactory<TestDbContext>(o => o.UseSqlite(_connection));
-        services.AddLigareClient(l => l.UseEntityFrameworkCore<TestDbContext>());
-        services.AddLigareRules(typeof(TestDatabase).Assembly);
-        _services = services.BuildServiceProvider();
-        _scope = _services.CreateScope();
+        var client = new ServiceCollection();
+        if (mode == Mode.Direct)
+        {
+            AddData(client);
+            client.AddLigareClient(l => l.UseEntityFrameworkCore<TestDbContext>());
+        }
+        else
+        {
+            var builder = WebApplication.CreateSlimBuilder();
+            builder.WebHost.UseTestServer();
+            AddData(builder.Services);
+            builder.Services.AddLigareServer<TestDbContext>(o => o.MaxPageSize = 50);
+            _server = builder.Build();
+            _server.MapLigare("/data");
+            _server.Start();
 
-        using var db = _services.GetRequiredService<IDbContextFactory<TestDbContext>>().CreateDbContext();
+            var testServer = _server.GetTestServer();
+            client.AddLigareClient(l => l.UseServer(_ =>
+            {
+                var http = testServer.CreateClient();
+                http.BaseAddress = new Uri("http://localhost/data/");
+                return http;
+            }));
+        }
+
+        _client = client.BuildServiceProvider();
+        _scope = _client.CreateScope();
+
+        using var db = new TestDbContext(new DbContextOptionsBuilder<TestDbContext>().UseSqlite(_connection).Options);
         db.Database.EnsureCreated();
 
         Released = new Status { Name = "Released" };
@@ -140,12 +175,25 @@ public sealed class TestDatabase : IAsyncDisposable
 
     public Tool Wrench { get; }
 
+    public static TestDatabase Create(Mode mode) => new(mode);
+
     public ILigareContext CreateContext() => _scope.ServiceProvider.GetRequiredService<ILigareContextFactory>().CreateContext();
 
     public async ValueTask DisposeAsync()
     {
         _scope.Dispose();
-        await _services.DisposeAsync();
+        await _client.DisposeAsync();
+        if (_server is not null)
+        {
+            await _server.DisposeAsync();
+        }
+
         await _connection.DisposeAsync();
+    }
+
+    private void AddData(IServiceCollection services)
+    {
+        services.AddDbContextFactory<TestDbContext>(o => o.UseSqlite(_connection));
+        services.AddLigareRules(typeof(TestDatabase).Assembly);
     }
 }

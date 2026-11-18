@@ -2,9 +2,10 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Ligare.Tests;
 
-public sealed class DirectModeTests : IAsyncLifetime
+/// <summary>The same behaviour in both modes: that is the point of Ligare.</summary>
+public abstract class ContextTests(Mode mode) : IAsyncLifetime
 {
-    private readonly TestDatabase _database = new();
+    private readonly TestDatabase _database = TestDatabase.Create(mode);
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
@@ -28,6 +29,24 @@ public sealed class DirectModeTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Queries_support_ordering_paging_and_captured_values()
+    {
+        await using var db = _database.CreateContext();
+        var names = new[] { "Wrench", "Caliper" };
+        var prefix = "C";
+
+        var ordered = await db.Set<Tool>().Where(t => names.Contains(t.Name)).OrderByDescending(t => t.Name).ToListAsync(Ct);
+        var second = await db.Set<Tool>().OrderBy(t => t.Name).Skip(1).Take(1).SingleAsync(Ct);
+        var startingWithC = await db.Set<Tool>().CountAsync(t => t.Name.StartsWith(prefix), Ct);
+        var anyBlocked = await db.Set<Tool>().AnyAsync(t => t.StatusId == _database.Blocked.Id, Ct);
+
+        Assert.Equal(["Wrench", "Caliper"], ordered.Select(t => t.Name));
+        Assert.Equal("Wrench", second.Name);
+        Assert.Equal(1, startingWithC);
+        Assert.True(anyBlocked);
+    }
+
+    [Fact]
     public async Task Changed_properties_are_saved()
     {
         await using (var db = _database.CreateContext())
@@ -46,17 +65,25 @@ public sealed class DirectModeTests : IAsyncLifetime
     {
         await using (var db = _database.CreateContext())
         {
-            var tool = await db.Set<Tool>().FirstAsync(t => t.Id == _database.Wrench.Id, Ct);
+            var tool = await db.Set<Tool>().Include(t => t.Status).FirstAsync(t => t.Id == _database.Wrench.Id, Ct);
             var blocked = await db.Set<Status>().FirstAsync(s => s.Id == _database.Blocked.Id, Ct);
 
             tool.StatusEntries.Add(new StatusEntry { Status = blocked, Comment = "Dropped" });
             await db.SaveChangesAsync(Ct);
+
+            // What the rules changed is visible right after saving, also in remote mode.
+            Assert.Same(blocked, tool.Status);
+            Assert.Equal("tester", tool.StatusEntries.Single().ChangedBy);
         }
 
         await using var check = _database.CreateContext();
-        var saved = await check.Set<Tool>().Include(t => t.StatusEntries).FirstAsync(t => t.Id == _database.Wrench.Id, Ct);
+        var saved = await check.Set<Tool>()
+            .Include(t => t.StatusEntries).ThenInclude(e => e.Status)
+            .FirstAsync(t => t.Id == _database.Wrench.Id, Ct);
         Assert.Equal(_database.Blocked.Id, saved.StatusId);
-        Assert.Equal("tester", Assert.Single(saved.StatusEntries).ChangedBy);
+        var entry = Assert.Single(saved.StatusEntries);
+        Assert.Equal("tester", entry.ChangedBy);
+        Assert.Equal("Blocked", entry.Status.Name);
     }
 
     [Fact]
@@ -92,8 +119,33 @@ public sealed class DirectModeTests : IAsyncLifetime
             await db.SaveChangesAsync(Ct);
         }
 
+        await using (var db = _database.CreateContext())
+        {
+            var customer = await db.Set<Customer>().Include(c => c.FavoriteTool).SingleAsync(Ct);
+            Assert.Equal("Wrench", customer.FavoriteTool?.Name);
+
+            customer.FavoriteTool = null;
+            await db.SaveChangesAsync(Ct);
+        }
+
         await using var check = _database.CreateContext();
-        var customer = await check.Set<Customer>().Include(c => c.FavoriteTool).SingleAsync(Ct);
-        Assert.Equal("Wrench", customer.FavoriteTool?.Name);
+        Assert.Null((await check.Set<Customer>().Include(c => c.FavoriteTool).SingleAsync(Ct)).FavoriteTool);
+    }
+
+    [Fact]
+    public async Task Removed_entities_are_deleted()
+    {
+        await using (var db = _database.CreateContext())
+        {
+            db.Remove(await db.Set<Tool>().FirstAsync(t => t.Name == "Caliper", Ct));
+            await db.SaveChangesAsync(Ct);
+        }
+
+        await using var check = _database.CreateContext();
+        Assert.Equal(1, await check.Set<Tool>().CountAsync(Ct));
     }
 }
+
+public sealed class DirectModeTests() : ContextTests(Mode.Direct);
+
+public sealed class RemoteModeTests() : ContextTests(Mode.Remote);

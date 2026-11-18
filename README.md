@@ -48,7 +48,7 @@ factory with `ServiceLifetime.Scoped`.
 
 ### Server — share a DbContext with remote clients
 
-*In development.* The server hosts the same `DbContext`, rules and query filters, and serves them
+The server hosts the same `DbContext`, rules and query filters, and serves them
 over OData:
 
 ```csharp
@@ -56,7 +56,7 @@ builder.Services.AddDbContextFactory<AppDbContext>(o => o.UseNpgsql(connectionSt
 builder.Services.AddLigareRules(typeof(ToolRules).Assembly);
 builder.Services.AddLigareServer<AppDbContext>(server =>
 {
-    server.MaxPageSize = 500;        // largest result a client can request
+    server.MaxPageSize = 500;        // more results must be paged with Skip/Take
     server.MaxExpansionDepth = 3;    // deepest Include chain
 });
 
@@ -65,11 +65,16 @@ app.MapLigare("/data");
 ```
 
 Only entity types of the `DbContext` are exposed, global query filters (for example per tenant)
-always apply, and every save runs the save rules on the server — a client cannot skip them.
+always apply, and every save runs the save rules on the server — a client cannot skip them. Secure
+the endpoints like any other: `app.MapLigare("/data").RequireAuthorization()`.
+
+Endpoints: `GET {prefix}/$model`, `GET {prefix}/{Type}?$filter=…&$orderby=…&$skip=…&$top=…&$expand=…`,
+`GET {prefix}/{Type}/$count`, `POST {prefix}/$save`. Queries use OData URL conventions, so `$filter`
+expressions from other tools work too; entities travel as plain JSON.
 
 ### Remote mode — the data is on a Ligare server
 
-*In development.* Blazor WebAssembly, a MAUI app against a server — the same code as in direct mode:
+Blazor WebAssembly, a MAUI app against a server — the same code as in direct mode:
 
 ```csharp
 builder.Services.AddLigareClient(l => l.UseServer(new Uri("https://example.com/data")));
@@ -109,6 +114,15 @@ public sealed class StatusChangeRules(TimeProvider clock) : IEntityRule<StatusCh
 A rejected save throws `LigareValidationException`; `exception.For(entity)` returns the messages by
 property name, ready for a form.
 
+## Remote mode: what runs on the server
+
+`Where`, `OrderBy`/`ThenBy` (descending), `Skip`, `Take`, `Include`/`ThenInclude` (with `OrderBy` inside),
+`AsNoTracking`, and `ToListAsync`, `FirstAsync`, `SingleAsync`, `AnyAsync`, `CountAsync` and their
+`OrDefault` variants. Inside `Where`: comparisons, `&&`, `||`, `!`, arithmetic, `string.Contains`/
+`StartsWith`/`EndsWith`/`ToLower`/`ToUpper`/`Trim`, `list.Contains(x)`, and `Any`/`All` on collections.
+Everything else throws `NotSupportedException` naming the operator — nothing silently runs in memory.
+Queries are asynchronous only.
+
 ## Things to know
 
 - **Ids assigned in code:** configure such keys with `ValueGeneratedNever()`. Otherwise EF Core takes
@@ -119,7 +133,8 @@ property name, ready for a form.
 
 ## Status
 
-Early development: direct mode works; server and remote mode are being built. The API will change.
+Early development: direct mode, server and remote mode work; concurrency tokens and file streams are
+next. The API will change.
 
 ## License
 
