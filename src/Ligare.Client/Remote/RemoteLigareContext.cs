@@ -60,7 +60,7 @@ internal sealed class RemoteLigareContext : ILigareContext
 
         await EnsureSuccessAsync(response, cancellationToken);
         var saved = await response.Content.ReadFromJsonAsync<SaveResponse>(WireJson.Options, cancellationToken);
-        _tracker.AcceptChanges(model, saved!.Entities);
+        _tracker.AcceptChanges(model, saved!.Entities, saved.Related ?? []);
         return saved.Entities.Count;
     }
 
@@ -250,7 +250,7 @@ internal sealed class Materializer(RemoteModel model, ChangeTracker? tracker)
         return entity;
     }
 
-    private static object Create(Type type) =>
+    internal static object Create(Type type) =>
         type.GetConstructor(System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic, Type.EmptyTypes) is { } constructor
             ? constructor.Invoke(null)
             : RuntimeHelpers.GetUninitializedObject(type);

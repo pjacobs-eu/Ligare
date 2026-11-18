@@ -103,7 +103,25 @@ internal sealed class LigareServerHost<TContext>(IOptions<LigareServerOptions> o
             .Select(db.Entry)
             .Select(entry => new WireEntity(entry.Metadata.ClrType.FullName!, EntityWriter.Key(entry), EntityWriter.Values(entry)))
             .ToList();
-        await Results.Json(new SaveResponse(saved), WireJson.Options).ExecuteAsync(http);
+
+        var writtenSet = new HashSet<object>(written, ReferenceEqualityComparer.Instance);
+        var related = new Dictionary<object, WireEntity>(ReferenceEqualityComparer.Instance);
+        foreach (var entry in written.Select(db.Entry))
+        {
+            foreach (var reference in entry.References)
+            {
+                if (reference.Metadata is INavigation { IsOnDependent: true, ForeignKey.IsOwnership: false } navigation
+                    && model.IsExposed(navigation.TargetEntityType)
+                    && reference.CurrentValue is { } target
+                    && !writtenSet.Contains(target) && !related.ContainsKey(target))
+                {
+                    var targetEntry = db.Entry(target);
+                    related[target] = new WireEntity(targetEntry.Metadata.ClrType.FullName!, EntityWriter.Key(targetEntry), EntityWriter.Values(targetEntry));
+                }
+            }
+        }
+
+        await Results.Json(new SaveResponse(saved, [.. related.Values]), WireJson.Options).ExecuteAsync(http);
     }
 
     private static TContext CreateContext(HttpContext http) =>

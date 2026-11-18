@@ -58,8 +58,11 @@ public sealed record WireChange(string Type, WireChangeState State, Dictionary<s
 /// <summary>Body of <c>POST {base}/$save</c>. Applied in one transaction, after the save rules.</summary>
 public sealed record SaveRequest(IReadOnlyList<WireChange> Changes);
 
-/// <summary>Every entity the save wrote, with its stored values, including those the rules changed.</summary>
-public sealed record SaveResponse(IReadOnlyList<WireEntity> Entities);
+/// <summary>
+/// Every entity the save wrote, with its stored values, including those the rules changed; and the
+/// entities their references point to, so a client can follow navigations the rules set.
+/// </summary>
+public sealed record SaveResponse(IReadOnlyList<WireEntity> Entities, IReadOnlyList<WireEntity>? Related = null);
 
 public sealed record WireEntity(string Type, Dictionary<string, JsonElement> Key, Dictionary<string, JsonElement> Values);
 

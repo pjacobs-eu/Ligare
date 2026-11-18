@@ -104,6 +104,18 @@ public abstract class ContextTests(Mode mode) : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Navigations_set_by_rules_point_to_entities_the_client_never_loaded()
+    {
+        await using var db = _database.CreateContext();
+        var gauge = db.Add(new Tool { Name = "Gauge" });
+
+        await db.SaveChangesAsync(Ct);
+
+        // The rule chose the default status; the client follows the navigation without loading it.
+        Assert.Equal("Released", gauge.Status.Name);
+    }
+
+    [Fact]
     public async Task Rejected_changes_report_their_property_and_store_nothing()
     {
         await using (var db = _database.CreateContext())

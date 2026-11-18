@@ -174,8 +174,30 @@ internal sealed class ChangeTracker
     }
 
     /// <summary>Takes over what the server stored and makes it the new baseline.</summary>
-    public void AcceptChanges(RemoteModel model, IReadOnlyList<WireEntity> saved)
+    public void AcceptChanges(RemoteModel model, IReadOnlyList<WireEntity> saved, IReadOnlyList<WireEntity> related)
     {
+        // Entities the saved ones now reference but this context never loaded (e.g. a status a rule chose).
+        foreach (var entity in related)
+        {
+            var type = model[entity.Type];
+            if (Find(type, entity.Key) is not null)
+            {
+                continue;
+            }
+
+            var instance = Materializer.Create(type.ClrType);
+            var shadow = new Dictionary<string, object?>();
+            foreach (var member in type.Values)
+            {
+                if (entity.Values.TryGetValue(member.Name, out var value))
+                {
+                    member.Set(instance, member.Read(value), shadow);
+                }
+            }
+
+            TakeSnapshot(Attach(instance, type, KeyOf(type, entity.Key), shadow));
+        }
+
         foreach (var entity in saved)
         {
             var type = model[entity.Type];
