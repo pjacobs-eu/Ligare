@@ -89,6 +89,21 @@ public abstract class ContextTests(Mode mode) : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Entities_added_by_a_rule_are_prepared_too()
+    {
+        await using (var db = _database.CreateContext())
+        {
+            var released = await db.Set<Status>().FirstAsync(s => s.Id == _database.Released.Id, Ct);
+            db.Add(new Tool { Name = "Gauge", Status = released });
+            await db.SaveChangesAsync(Ct);
+        }
+
+        await using var check = _database.CreateContext();
+        var gauge = await check.Set<Tool>().Include(t => t.StatusEntries).SingleAsync(t => t.Name == "Gauge", Ct);
+        Assert.Equal("tester", Assert.Single(gauge.StatusEntries).ChangedBy);
+    }
+
+    [Fact]
     public async Task Rejected_changes_report_their_property_and_store_nothing()
     {
         await using (var db = _database.CreateContext())

@@ -97,9 +97,19 @@ public sealed class StatusEntryRule : IEntityRule<StatusEntry>
     }
 }
 
-/// <summary>Names are required, and the status only changes through a status entry.</summary>
+/// <summary>Names are required, and the status only changes through a status entry; new tools get their first one.</summary>
 public sealed class ToolRule : IEntityRule<Tool>
 {
+    public ValueTask PrepareAsync(EntityChange<Tool> change, CancellationToken cancellationToken)
+    {
+        if (change.IsAdded && change.Entity.StatusEntries.Count == 0)
+        {
+            change.Entity.StatusEntries.Add(new StatusEntry { Status = change.Entity.Status, Comment = "New" });
+        }
+
+        return ValueTask.CompletedTask;
+    }
+
     public void Validate(EntityChange<Tool> change, ValidationErrors errors)
     {
         if (string.IsNullOrWhiteSpace(change.Entity.Name))

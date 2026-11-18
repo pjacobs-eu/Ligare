@@ -8,13 +8,24 @@ namespace Ligare;
 public interface IEntityRule<T> where T : class
 {
     /// <summary>
-    /// Runs first, for every change: complete or derive values, e.g. stamp who changed something or keep
-    /// a denormalized field in sync. May change any tracked entity.
+    /// Runs first, once for every changed entity, also for entities another rule added: complete or
+    /// derive values, e.g. stamp who changed something or keep a denormalized field in sync. May change
+    /// any tracked entity.
     /// </summary>
     ValueTask PrepareAsync(EntityChange<T> change, CancellationToken cancellationToken) => ValueTask.CompletedTask;
 
     /// <summary>Runs after every <see cref="PrepareAsync"/>: report what is not allowed. Must not change entities.</summary>
     void Validate(EntityChange<T> change, ValidationErrors errors)
     {
+    }
+
+    /// <summary>
+    /// Like <see cref="Validate"/>, for checks that query, e.g. uniqueness through
+    /// <c>change.ChangeSet.Context</c>. By default runs <see cref="Validate"/>.
+    /// </summary>
+    ValueTask ValidateAsync(EntityChange<T> change, ValidationErrors errors, CancellationToken cancellationToken)
+    {
+        Validate(change, errors);
+        return ValueTask.CompletedTask;
     }
 }

@@ -12,8 +12,8 @@ public static class SaveRules
     private static readonly ConcurrentDictionary<Type, IRuleInvoker> Invokers = new();
 
     /// <summary>
-    /// Prepares every change, rebuilds the change set (preparing may change other entities), then
-    /// validates every change.
+    /// Prepares every changed entity once — including entities that preparing others added — then
+    /// validates every change of the final change set.
     /// </summary>
     /// <param name="services">The scope the rules are resolved from.</param>
     /// <param name="detectChanges">Builds the change set from the current state of the context.</param>
@@ -21,15 +21,20 @@ public static class SaveRules
     /// <exception cref="LigareValidationException">A rule rejected a change.</exception>
     public static async Task RunAsync(IServiceProvider services, Func<ChangeSet> detectChanges, CancellationToken cancellationToken)
     {
-        foreach (var change in detectChanges().Changes)
+        var prepared = new HashSet<object>(ReferenceEqualityComparer.Instance);
+        while (detectChanges().Changes.Where(c => !prepared.Contains(c.Entity)).ToList() is { Count: > 0 } pending)
         {
-            await Invoker(change.Entity.GetType()).PrepareAsync(services, change, cancellationToken);
+            foreach (var change in pending)
+            {
+                prepared.Add(change.Entity);
+                await Invoker(change.Entity.GetType()).PrepareAsync(services, change, cancellationToken);
+            }
         }
 
         var errors = new ValidationErrors();
         foreach (var change in detectChanges().Changes)
         {
-            Invoker(change.Entity.GetType()).Validate(services, change, errors);
+            await Invoker(change.Entity.GetType()).ValidateAsync(services, change, errors, cancellationToken);
         }
 
         if (errors.Any)
@@ -45,7 +50,7 @@ public static class SaveRules
     {
         ValueTask PrepareAsync(IServiceProvider services, EntityChange change, CancellationToken cancellationToken);
 
-        void Validate(IServiceProvider services, EntityChange change, ValidationErrors errors);
+        ValueTask ValidateAsync(IServiceProvider services, EntityChange change, ValidationErrors errors, CancellationToken cancellationToken);
     }
 
     private sealed class RuleInvoker<T> : IRuleInvoker where T : class
@@ -58,11 +63,11 @@ public static class SaveRules
             }
         }
 
-        public void Validate(IServiceProvider services, EntityChange change, ValidationErrors errors)
+        public async ValueTask ValidateAsync(IServiceProvider services, EntityChange change, ValidationErrors errors, CancellationToken cancellationToken)
         {
             foreach (var rule in services.GetServices<IEntityRule<T>>())
             {
-                rule.Validate(new EntityChange<T>(change), errors);
+                await rule.ValidateAsync(new EntityChange<T>(change), errors, cancellationToken);
             }
         }
     }

@@ -258,8 +258,11 @@ internal sealed class LigareServerHost<TContext>(IOptions<LigareServerOptions> o
                 entry.Property(keyProperties[i].Name).CurrentValue = keyValues[i];
             }
 
-            SetValues(entry, change.Values, keyProperties);
-            entry.State = EntityState.Added;
+            // CLR values first, then Add, which also tracks owned data; shadow values exist once tracked.
+            var values = change.Values ?? [];
+            SetValues(entry, values.Where(v => entityType.FindProperty(v.Key)?.IsShadowProperty() != true).ToDictionary(), keyProperties);
+            db.Add(entity);
+            SetValues(entry, values.Where(v => entityType.FindProperty(v.Key)?.IsShadowProperty() == true).ToDictionary(), keyProperties);
             return;
         }
 
@@ -285,7 +288,7 @@ internal sealed class LigareServerHost<TContext>(IOptions<LigareServerOptions> o
             {
                 if (key.Contains(property))
                 {
-                    if (entry.State != EntityState.Detached)
+                    if (entry.State is not (EntityState.Detached or EntityState.Added))
                     {
                         throw new LigareQueryException($"The key {type.ClrType.Name}.{name} cannot be changed.");
                     }
