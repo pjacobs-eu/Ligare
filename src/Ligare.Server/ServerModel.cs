@@ -11,12 +11,14 @@ internal sealed class ServerModel
 {
     private readonly Dictionary<string, IEntityType> _byName;
     private readonly Dictionary<string, IEntityType> _byClrName;
+    private readonly HashSet<IEntityType> _exposedTypes;
 
-    public ServerModel(IModel model)
+    public ServerModel(IModel model, IReadOnlySet<Type> excluded)
     {
         var exposed = model.GetEntityTypes()
-            .Where(e => !e.IsOwned() && !e.HasSharedClrType && e.FindPrimaryKey() is not null)
+            .Where(e => !e.IsOwned() && !e.HasSharedClrType && e.FindPrimaryKey() is not null && !excluded.Contains(e.ClrType))
             .ToList();
+        _exposedTypes = exposed.ToHashSet();
 
         var duplicates = exposed.GroupBy(e => e.ClrType.Name).Where(g => g.Count() > 1).Select(g => g.Key).ToList();
         if (duplicates.Count > 0)
@@ -26,7 +28,7 @@ internal sealed class ServerModel
 
         _byName = exposed.ToDictionary(e => e.ClrType.Name, StringComparer.Ordinal);
         _byClrName = exposed.ToDictionary(e => e.ClrType.FullName!, StringComparer.Ordinal);
-        Description = new ModelDescription(exposed.Select(Describe).ToList());
+        Description = new ModelDescription(exposed.Select(e => Describe(e, _exposedTypes)).ToList());
         Edm = BuildEdm(exposed);
     }
 
@@ -39,7 +41,9 @@ internal sealed class ServerModel
 
     public IEntityType? FindByClrName(string clrName) => _byClrName.GetValueOrDefault(clrName);
 
-    private static EntityTypeDescription Describe(IEntityType entityType)
+    public bool IsExposed(IEntityType entityType) => _exposedTypes.Contains(entityType);
+
+    private static EntityTypeDescription Describe(IEntityType entityType, HashSet<IEntityType> exposed)
     {
         var members = new List<MemberDescription>();
 
@@ -64,6 +68,12 @@ internal sealed class ServerModel
                     members.Add(new MemberDescription(navigation.Name, MemberKind.Value));
                 }
 
+                continue;
+            }
+
+            if (!exposed.Contains(navigation.TargetEntityType))
+            {
+                // Navigations to excluded types do not exist for clients; their foreign keys stay plain values.
                 continue;
             }
 

@@ -127,7 +127,7 @@ public sealed class TestDatabase : IAsyncDisposable
     private readonly IServiceScope _scope;
     private readonly WebApplication? _server;
 
-    private TestDatabase(Mode mode)
+    private TestDatabase(Mode mode, Action<LigareServerOptions>? configureServer)
     {
         _connection.Open();
 
@@ -142,7 +142,11 @@ public sealed class TestDatabase : IAsyncDisposable
             var builder = WebApplication.CreateSlimBuilder();
             builder.WebHost.UseTestServer();
             AddData(builder.Services);
-            builder.Services.AddLigareServer<TestDbContext>(o => o.MaxPageSize = 50);
+            builder.Services.AddLigareServer<TestDbContext>(o =>
+            {
+                o.MaxPageSize = 50;
+                configureServer?.Invoke(o);
+            });
             _server = builder.Build();
             _server.MapLigare("/data");
             _server.Start();
@@ -175,7 +179,7 @@ public sealed class TestDatabase : IAsyncDisposable
 
     public Tool Wrench { get; }
 
-    public static TestDatabase Create(Mode mode) => new(mode);
+    public static TestDatabase Create(Mode mode, Action<LigareServerOptions>? configureServer = null) => new(mode, configureServer);
 
     public ILigareContext CreateContext() => _scope.ServiceProvider.GetRequiredService<ILigareContextFactory>().CreateContext();
 

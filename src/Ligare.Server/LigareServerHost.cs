@@ -109,7 +109,7 @@ internal sealed class LigareServerHost<TContext>(IOptions<LigareServerOptions> o
     private static TContext CreateContext(HttpContext http) =>
         http.RequestServices.GetRequiredService<IDbContextFactory<TContext>>().CreateDbContext();
 
-    private ServerModel Model(DbContext db) => _model ??= new ServerModel(db.Model);
+    private ServerModel Model(DbContext db) => _model ??= new ServerModel(db.Model, _options.Excluded);
 
     private async Task QueryAsync<T>(HttpContext http, DbContext db, IEntityType entityType, bool count) where T : class
     {
@@ -230,7 +230,7 @@ internal sealed class LigareServerHost<TContext>(IOptions<LigareServerOptions> o
         foreach (var name in navigations)
         {
             var navigation = current.FindNavigation(name);
-            if (navigation is null || navigation.ForeignKey.IsOwnership)
+            if (navigation is null || navigation.ForeignKey.IsOwnership || !_model!.IsExposed(navigation.TargetEntityType))
             {
                 throw new LigareQueryException($"{current.ClrType.Name} has no navigation '{name}'.");
             }

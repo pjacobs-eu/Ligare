@@ -14,6 +14,18 @@ public sealed class LigareServerOptions
 
     /// <summary>The deepest <c>Include</c>/<c>ThenInclude</c> chain a client may request.</summary>
     public int MaxExpansionDepth { get; set; } = 3;
+
+    internal HashSet<Type> Excluded { get; } = [];
+
+    /// <summary>
+    /// Keeps an entity type of the context away from clients: it cannot be queried, included or saved.
+    /// Use it for data that only the server may touch, or that has no save rules yet.
+    /// </summary>
+    public LigareServerOptions Exclude<T>() where T : class
+    {
+        Excluded.Add(typeof(T));
+        return this;
+    }
 }
 
 public static class LigareServerExtensions

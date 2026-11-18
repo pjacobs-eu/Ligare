@@ -149,3 +149,17 @@ public abstract class ContextTests(Mode mode) : IAsyncLifetime
 public sealed class DirectModeTests() : ContextTests(Mode.Direct);
 
 public sealed class RemoteModeTests() : ContextTests(Mode.Remote);
+
+public sealed class ServerTests
+{
+    [Fact]
+    public async Task Excluded_types_are_not_served()
+    {
+        await using var database = TestDatabase.Create(Mode.Remote, server => server.Exclude<Customer>());
+        await using var db = database.CreateContext();
+
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() => db.Set<Customer>().ToListAsync(TestContext.Current.CancellationToken));
+
+        Assert.Contains("not an entity type of the Ligare server", error.Message);
+    }
+}

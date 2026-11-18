@@ -58,6 +58,7 @@ builder.Services.AddLigareServer<AppDbContext>(server =>
 {
     server.MaxPageSize = 500;        // more results must be paged with Skip/Take
     server.MaxExpansionDepth = 3;    // deepest Include chain
+    server.Exclude<AuditLog>();      // entity types clients must not reach
 });
 
 var app = builder.Build();
