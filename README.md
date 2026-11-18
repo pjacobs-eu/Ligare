@@ -120,3 +120,11 @@ property name, ready for a form.
 ## Status
 
 Early development: direct mode works; server and remote mode are being built. The API will change.
+
+## License
+
+Copyright © 2026 Philip Jacobs.
+
+Ligare is licensed under the [GNU Lesser General Public License v3.0](COPYING.LESSER), which builds on
+the [GNU General Public License v3.0](COPYING). You can use Ligare in proprietary applications;
+changes to Ligare itself must be published under the same license.
